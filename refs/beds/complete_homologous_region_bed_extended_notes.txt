@@ -1,0 +1,97 @@
+# Information based on this paper: https://www.nature.com/articles/s41525-024-00421-z
+# IN HG19:
+# Start of IKBKG exon 3: 153784380
+# Start of IKBKG hom region: 153784098 (282 bp difference with above)
+# End of IKBKG hom region: 153819590 (35492 bp difference with above)
+# Difference of the above: 35492
+
+# Start of IKBKGP1 hom region: 153876829
+# End of IKBKGP1 hom region: 153841350
+# Difference of the above 2: 35479
+
+# Why are the hom region lengths different?
+
+# Either way, with this, we can get a rough area of where the homologous region should be located at
+# In HG38:
+# Start of IKBKG exon 3: 154556165
+# Start of IKBKG hom region: 154555883 (282 bp difference with above)
+# End of IKBKG hom region: 154555883 + 35492 = 154591375
+# (Had to minus 1, to ensure 154555883 is covered in IGV)
+# For some reason, IGV will not begin highlighting at the start of the coordinate, 
+# It will highlight from start + 1bp
+# wait, its because bed files are 0-based for the start, and 1-based for the end
+# so we are correct
+# chrX	154555882	154591375	IKBKG_HOM_REGION
+
+# ADJUSTED COORDS BASED ON MANUAL INSPECTION
+
+chrX	154555882	154591327	IKBKG_HOM_REGION
+
+# Start of IKBKGP1 exon 3: 154648273
+# Start of IKBKGP1 hom region: 154648273 + 282 = 154648555
+# End of IKBKGP1 hom region: 154648555 - 35479 = 154613076
+# Again, plus 1 to the above
+# chrX	154613077	154648555	IKBKGP1_HOM_REGION
+# ADJUSTED COORDS BASED ON MANUAL INSPECTION
+chrX	154613096	154648555	IKBKGP1_HOM_REGION
+
+
+The manual validation procedure:
+
+Lets look into the start of the hom region
+
+chrX:154555881-154563880
+Aligned against
+chrX:154640556-154648555 (remember, hom2 starts on the right)
+
+The sequence for the region: 154,648,538-154,648,565 (hom 2)
+(reversed an in reverse complementary order):
+GACATTTGAGACGTACTTTTAAGTGAAG
+
+The sequence for the region: 154,555,873 - 154,555,900 (hom 1)
+cctggccAACACGTACTTTTAAGTGAAG
+
+Comparing the 2:
+
+GACATTTGAGACGTACTTTTAAGTGAAG
+cctggccAACACGTACTTTTAAGTGAAG
+
+This means, the start of the hom region is:
+154,555,883 for hom 1
+154,648,555 for hom 2
+
+
+Now lets look into the end of the hom region:
+chrX:154590325-154591327
+Aligned against
+chrX:154613096-154614098
+
+The sequence for the region: chrX	154613076	154613105	(hom2)
+(reversed an in reverse complementary order):
+taaagaaattgaattagttgaagacaaaat
+
+The sequence for the region: chrX	154591319	154591348	(hom 1)
+taaagaaatacatgaaaagaaatacaaaa
+
+Comparing the 2:
+
+taaagaaattgaattagttgaagacaaaat
+taaagaaatacatgaaaagaaatacaaaa
+
+taaagaaat
+
+This means that the end of the hom region is:
+154,591,327 for hom 1
+154,613,097 for hom 2
+
+Overall:
+chrX:154,555,883-154,591,327
+chrX:154,613,097-154,648,555
+
+
+That means that the original coordinates were correct (there must be a lot of indels)
+
+chrX:154,555,883-154,591,327
+chrX:154,613,097-154,648,555
+
+The reason for the discrepancy in lengths is that the second hom region has 14 insertions
