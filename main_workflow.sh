@@ -5,10 +5,12 @@ set -a
 source "config.env"
 set +a
 
-# Fail early if either is missing or empty
+# Fail early if all are missing or empty
 : "${VEP_SIF:?VEP_SIF not set in config.env}"
 : "${VEP_CACHE:?VEP_CACHE not set in config.env}"
 : "${VEP_PLUGINS:?VEP_PLUGINS not set in config.env}"
+
+[ $# -eq 2 ] || { echo "usage: $0 in.bam outdir" >&2; exit 1; }
 
 infile=$1
 sample=$(basename "$infile")
@@ -16,14 +18,10 @@ sample=${sample%.bam}
 outfile_path=$2
 
 if [ ! -d $outfile_path ]; then
-    mkdir $outfile_path
+    mkdir -p ${outfile_path}/preprocessing
 else
     echo "${outfile_path} already exists. Please delete the folder or change the output directory name" >&2
     exit 1
-fi
-
-if [ ! -d ${outfile_path}/preprocessing ]; then
-    mkdir $outfile_path/preprocessing
 fi
 
 preprocessing_prefix="${outfile_path}/preprocessing/${sample}"
@@ -53,7 +51,9 @@ remapped_merged="${preprocessing_prefix}.remapped.bam"
 
 genome_IKBKGP1_masked="refs/indexes/genome_IKBKGP1_masked/genome_IKBKGP1_masked.fa"
 
-# dont use -M flag as it will mark shorter split hits as supplementary
+# dont use -M flag as it will mark shorter split hits as secondary
+# samtools depth/Vardict will drop them by default. Without it, they're
+# supplementary and are kept
 # -a flag will output all alternative alignments for a query sequence
 # these will be flagged as secondary, so ignore it
 bwa mem -Y -t 1 $genome_IKBKGP1_masked ${preprocessing_prefix}_R1.fastq.gz ${preprocessing_prefix}_R2.fastq.gz \
@@ -70,6 +70,9 @@ samtools index $remapped_merged
 
 remapped_depth_file="${preprocessing_prefix}.remapped_depth.tsv"
 echo -e "Chr\tPosition\tDepth" > $remapped_depth_file
+
+# does not count duplicates by default
+# does count supplementaries
 samtools depth -a -b refs/beds/ROI.bed $remapped_merged >> $remapped_depth_file
 
 # for output cleanliness
@@ -84,12 +87,23 @@ rm ${remapped_singletons}
 
 outfile_prefix="${outfile_path}/${sample}"
 
+# Note that vardict by default uses this filter flag -F 504 
+# this drops unmapped, secondary and duplicate reads (if you set the -t flag, vardict will identify duplicates, that were not flagged as such)
+# HOWEVER, this check will drop the supplementary reads downstream, if the -F flag is not set to 0: 
+# if (!instance().conf.samfilter.equals("0") && record.getSupplementaryAlignmentFlag()) {
+#     return; // Ignore the supplementary for now so that it won't skew the coverage
+# }
+# Hence, we manually filter it here, such that we can apply the -F flag in vardict-java and not worry about those reads
+
+remapped_merged_filtered="${preprocessing_prefix}.remapped_filtered.bam"
+samtools view -b -F 0x504 -o $remapped_merged_filtered $remapped_merged
+samtools index $remapped_merged_filtered
+
 # -c -S -E are for the bed file
 # -t means dedup
 # -I refers to the maximum indel length
 # Combine SNVs into MNV or SNV with indel to complex if variants are located closer than `-X` option (default <=2 bases) and have good base qualities. 
-# Thats why we set -X into 0, as we want to the variants
-# Need to check if it merges the variants if and only if they occur on the same read
+# Thats why we set -X into 0, as we want to report the variants as separate records so VEP, SpliceAI, REVEL and gnomAD can annotate them individually
 # currently disabled -k (local realignment) for fear of pseudogene remapping but it should be considered
 # note, the bcftools norm will spit out this warning: Warning: the tag INFO/SVLEN must be defined as Number=A in order for the field to be split
 # we will ignore it as vardict outputs one SV output per SV allele
@@ -102,7 +116,7 @@ vardict_out="${outfile_prefix}_vardict.vcf"
 # it will use the "end" as the length
 vardict-java -G $genome_IKBKGP1_masked \
              -N ${sample} \
-             -b $remapped_merged \
+             -b $remapped_merged_filtered \
              -I 120 \
              -X 0 \
              --mfreq 0.1 \
@@ -115,15 +129,19 @@ vardict-java -G $genome_IKBKGP1_masked \
              -c 1 \
              -S 2 \
              -E 3 \
+             -F 0 \
              refs/beds/ikbkg_small_variant_analysis_regions.bed --nosv | \
             var2vcf_valid.pl -b refs/beds/chrX.bed -N ${sample} -A -f 0.01 | \
-            bcftools sort - | bcftools norm -m - -o ${vardict_out}
+            bcftools sort - | bcftools norm -f $genome_IKBKGP1_masked -m - -o ${vardict_out}
 
 # follow guide here to manually install vep caches: https://asia.ensembl.org/info/docs/tools/vep/script/vep_cache.html#cache
 # only use refseq at this stage
 # need to also fetch Homo_sapiens.GRCh38.dna.toplevel.fa.gz from https://ftp.ensembl.org/pub/release-115/fasta/homo_sapiens/dna/
 # put it in ~/vep_data/homo_sapiens_[merged|refseq]/115_GRCh38/.
 # removed merged flag, only want refseq with refseq select
+
+rm $remapped_merged_filtered
+rm "${remapped_merged_filtered}.bai"
 
 vardict_annotated_temp1="${outfile_prefix}_vardict_temp1.vcf"
 vardict_annotated_temp2="${outfile_prefix}_vardict_temp2.vcf"
