@@ -6,11 +6,11 @@ output_vcf = sys.argv[2]
 threshold = float(sys.argv[3])
 
 common_variants_list = []
-with open("../refs/misc/common_variants_all_workflows.txt", "r") as f:
+with open("refs/misc/common_variants_all_workflows.txt", "r") as f:
     for line in f:
         common_variants_list.append(line.strip())
 
-with open("../refs/misc/ikbkg_ikbkgp1_gnomad_entires.tsv", "r") as f:
+with open("refs/misc/ikbkg_ikbkgp1_gnomad_entires.tsv", "r") as f:
     f.readline()
     for line in f:
         curr = line.strip().split("\t")

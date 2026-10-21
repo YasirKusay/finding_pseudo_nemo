@@ -122,7 +122,7 @@ vardict-java -G $genome_IKBKGP1_masked \
              --mfreq 0.1 \
              -t \
              --fisher \
-             -f 0.01 \
+             -f 0.10 \
              -r 5 \
              -k 0 \
              -m 9 \
